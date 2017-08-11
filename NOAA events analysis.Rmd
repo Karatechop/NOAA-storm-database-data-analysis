@@ -1,0 +1,901 @@
+---
+title: Analysis of population health and economic consequences of events documented
+  in the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database.
+author: "Boris Rugel"
+date: "24. September 2015"
+output: html_document
+---
+
+```{r set-options, echo=FALSE, cache=FALSE}
+options(width = 16)
+```
+# SYNOPSIS
+
+Prior to analysis of population health and economic consequences of events from NOAA database, several exploratory and data processing steps were performed. A barplot was created first to represent unique event types by year of occurence. This barplot yielded understanding that only events from 1996 till 2011 can provide unbiased starting point for further data analysis. In the next step all event names were converged to 48 NOAA permitted names. Further, data was processed to a form that allowed it's graphical representation per assignment requirement - using not more then 2 plots. In the last step results were presented and summarised as short answers for assigment questions.
+
+# INTRODUCTION
+Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern.
+This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
+
+# DATA
+  
+```{r loadData}
+    
+loadData <- function(fileURL, destfile){
+    						if(!file.exists(destfile)){
+    						download.file(fileURL, destfile)
+    									  }else{
+    							message("Data already downloaded")
+    									        }
+    					       }
+                                                         
+fileURL<-"https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"   
+loadData(fileURL, "repdata-data-StormData.csv.bz2")
+```
+
+# DATA PROCESSING
+
+## TIMEFRAME CHOICE AND "0" DATA EXCLUSION
+
+```{r cache=TRUE, cache.lazy=FALSE}
+stormdata<-read.csv("repdata-data-StormData.csv.bz2")
+     
+```
+	
+```{r message=FALSE, warning=FALSE}
+# Load libraries
+library(plyr)      
+library(dplyr)
+library(reshape2)
+library(lubridate)
+library(ggplot2)
+library(ggthemes)
+```
+
+We will start by creating a barplot of unique event names used in stormdata dataset to check consistency in event filing.
+
+```{r}
+# Get event years from "BGN_DATE" column
+years<-sapply(strsplit(as.character(stormdata$BGN_DATE)," ",fixed = TRUE),"[[",1)
+years<-sapply(strsplit(years,"/",fixed = TRUE),"[[",3)
+years<-as.data.frame(years)
+  	
+# Subset event years and events
+events_by_years<-data.frame(years=as.numeric(levels(years$years)[years$years]), 
+                            events=stormdata$EVTYPE
+                            )
+    	
+# Aggregate all unique events for each year by year of occurence
+unique_events_by_years<-aggregate(events~years, 
+                                  events_by_years, 
+                                  n_distinct
+                                  )
+```
+ 
+```{r fig.width=10, fig.height=8}
+# Create plot
+unique_events_by_years_plot<- qplot(x=years, y=events, 
+                                    data=unique_events_by_years, 
+                                    geom="bar", stat="identity", 
+                                    main = "Number of unique StormData events by years", 
+                                    xlab = "year"
+                                    )
+    	                                    
+unique_events_by_years_plot + scale_x_continuous(breaks=1950:2011) +
+                             theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+From this barplot we can observe that from year 1950 up to year 1992 only a few unique types of events 
+were reported. This first "era" is followed by a large spike of unique types of event reported each year between years 1993 and 2002, peaking at 1995 and gradualy droping down up to year 2003. After that number of unique types of events each year stabilizes at about 50.
+
+This is is congruent with what we can lear from the Storm Events Database website -  
+https://www.ncdc.noaa.gov/stormevents/details.jsp?type=eventtype (accessed August 16th 2015):
+* From 1950 through 1954, only tornado events were recorded.
+* From 1955 through 1992, only tornado, thunderstorm wind and hail events were keyed from the paper publications into digital data.
+* From 1993 to 1995 - the NWS Weather Offices sent their keyed Storm Data files to directly to NCDC in Word Perfect 5.0 format on 3.5" floppy diskettes. 
+A best effort was made to import these files into the original Storm Events Database. These data had many inconsistencies in the spelling of event types. June & July 1993 were misplaced and are not included
+* From 1996 to present, 48 event types are recorded as defined in NWS Directive 10-1605. 
+
+Our assignment is to provide information on what influence do the StormData events have on public health 
+and what economic damage do they cause. 
+Clearly, 1950-1992 data would distort the results of such analysis due to the fact that the majority of evet types (both currently permitted and not permitted) were introduced only after year 1993. This leads to a conclusion that the 1950-1992 subset of the StormData dataset might be worth omitting.
+
+Before making a decision to omit the 1950-1992 subset we can check what impact does it have on complete dataset
+in regards of assignment questions. At this point it will be much easier to look into influence of 1950-1992 events on public health. We will calculate percentages of all fatalities and injuries that happened in years 1950-1992.
+
+```{r}
+event_conseq<-data.frame(years=as.numeric(levels(years$years)[years$years]), 
+	                         fatalities=stormdata$FATALITIES, 
+	                         injuries=stormdata$INJURIES
+	                         )
+      	
+upto1992<-event_conseq[(event_conseq$years<=1992),]
+  
+# Fatalities: 
+round(100*sum(upto1992$fatalities)/sum(event_conseq$fatalities))
+      
+# Injuries: 
+round(100*sum(upto1992$injuries)/sum(event_conseq$injuries))
+```
+
+28% of all fatalities and 51% of all injuries were caused by just 3 types of events reported in years 1950-1992!
+This legacy data would completely shift the picture in favour of these 3 event types if one would compare them to 
+more recent event types. This solidifies the conclusion that we have to ignore 1950-1992 data in further analysis.
+
+We shall also omit the 1993-1995 period as it was only integrated at best effort basis and is marked by inconsistent naming and partial data loss.
+
+```{r}
+# Subset original dataset for 1996-2011 events
+stormdata$years<-as.numeric(levels(years$years)[years$years])
+stormdata_9611<-filter(stormdata, stormdata$years>1995)
+      
+# Create subdataset of stormdata that contains information relevant for health and economic impact analysis 
+# (from here on refered to as "H&E subset"
+stormdata_9611_health_econ<-data.frame(years=stormdata_9611$years, 
+                                       date=stormdata_9611$BGN_DATE,
+                                       state=stormdata_9611$STATE, 
+                                       events=stormdata_9611$EVTYPE, 
+                                       fatalities=stormdata_9611$FATALITIES, 
+                                       injuries=stormdata_9611$INJURIES, 
+                                       prop_dmg=stormdata_9611$PROPDMG, 
+                                       prop_dmg_exp=stormdata_9611$PROPDMGEXP, 
+                                       crop_dmg=stormdata_9611$CROPDMG, 
+                                       crop_dmg_exp=stormdata_9611$CROPDMGEXP
+                                       )
+      
+head(stormdata_9611_health_econ)
+```
+
+
+There are 0 in both fatalities and injuries columns. Rows that have 0s both in fatality and injury columns 
+will have no relevance for the impact on health analysis and we can ignore them. Let's see how many of them are there:
+  		
+```{r}
+table(stormdata_9611_health_econ$fatalities==0)
+table(stormdata_9611_health_econ$injuries==0)
+table(stormdata_9611_health_econ$prop_dmg==0)
+table(stormdata_9611_health_econ$crop_dmg==0)
+```
+		
+It looks like majority of events resulted in 0 fatalities and/or injuries and 0 property and/or crop damage.
+
+Let's have all rows that have 0 fatalities and injuries or 0 property and crop damage removed from the subset.
+		
+```{r}
+# Subset for values >0
+stormdata_9611_health_econ_no0<-filter(stormdata_9611_health_econ, 
+                                      (stormdata_9611_health_econ$fatalities>0 &  
+                                       stormdata_9611_health_econ$injuries>0) |      
+                                      (stormdata_9611_health_econ$prop_dmg>0 &   
+                                       stormdata_9611_health_econ$crop_dmg>0)
+                                       )
+# Convert event to character:
+stormdata_9611_health_econ_no0$events<-as.character(stormdata_9611_health_econ_no0$events)
+```
+		
+## EVENT NAMES FORMATTING
+		
+Now let's have a closer look on event names.
+      
+```{r}
+# Check if there were events each year 1996-2011
+table(stormdata_9611_health_econ_no0$years)
+```
+      
+As we can see - there were events with health of economic impact each year in the 1996-2011 period.
+This is important because as we have seen atleast 1996-2002 subperiod still showes inconsistent event naming.
+
+NATIONAL WEATHER SERVICE INSTRUCTION 10-1605 (NWSI doc) [https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf] (accessed August 16th 2015)
+under point 2.1. defines 48 permitted event names.
+We can also learn from this documents that the event naming rules last changed in 2007, so it is probable that 
+there are event naming inconsistencies even in the years 2002-2007.
+Before performing any further analysis we have to converge all event names used to file H&E subset events to be consistent with the 48 permitted names.
+
+Prior to introduction of name convergecy rules we have to perform several preparation steps.
+
+```{r}
+# Let's create a data frame that contains these 48 permitted names:
+allowed_events<-data.frame(events=c("Astronomical Low Tide","Avalanche","Blizzard","Coastal Flood",
+                              	    "Cold/Wind Chill","Debris Flow","Dense Fog","Dense Smoke",
+                              	    "Drought","Dust Devil","Dust Storm","Excessive Heat",
+                              	    "Extreme Cold/Wind Chill","Flash Flood","Flood","Frost/Freeze",
+                              	    "Funnel Cloud","Freezing Fog","Hail","Heat",
+                              	    "Heavy Rain","Heavy Snow","High Surf","High Wind",
+                              	    "Hurricane (Typhoon)","Ice Storm","Lake-Effect Snow","Lakeshore Flood",
+                              	    "Lightning","Marine Hail","Marine High Wind","Marine Strong Wind",
+                              	    "Marine Thunderstorm Wind","Rip Current","Seiche","Sleet",
+                              	    "Storm Surge/Tide","Strong Wind","Thunderstorm Wind","Tornado",
+                              	    "Tropical Depression","Tropical Storm","Tsunami","Volcanic Ash",
+                              	    "Waterspout","Wildfire","Winter Storm","Winter Weather"
+                              	    ), stringsAsFactors = FALSE
+                            )
+
+# Make all event names upper case to ease cross examination:
+allowed_events$events<-toupper(allowed_events$events)
+stormdata_9611_health_econ_no0$events<-toupper(stormdata_9611_health_econ_no0$events)
+    
+# Now let's create a function that will return separate data frames for all unique permitted 
+# and all unique not permitted event names used to file H&E subset events.
+# It will take all unique names used to file events in the H&E subset and all permitted names as arguments
+# and return information on how many and hich used names are permitted and how many and wich used names 
+# are not permitted.
+# We will use it to check how introduced name convergence rules perform. 
+    	
+# As a pre-step we will set "stormdata_9611_health_econ_no0$events" and "allowed_events$events" subsets
+# to "used" and "allowed" variables for ease of use
+used<-sort(unique(stormdata_9611_health_econ_no0$events))
+allowed<-sort(allowed_events$events)
+    	
+health_econ_events_names <- function(x,y){
+    	
+			# Permitted StormData names used to file health events:
+			health_econ_events_ok<-intersect(x, y)
+			health_econ_events_ok_num<-length(health_econ_events_ok)
+  						
+			# Not permitted StormData names used to file health events:
+			health_econ_events_notok<-!(x %in% y)
+			health_econ_events_notok<-x[health_econ_events_notok]
+			health_econ_events_notok_num<-length(health_econ_events_notok)
+  						
+			notok_global<<-health_econ_events_notok
+    						
+			returnList <- list("Number of unique permitted event names used in H&E subset:" = health_econ_events_ok_num,
+  		                  "Number of unique not permitted event names used in H&E subset:"= health_econ_events_notok_num,
+    	                  "Permitted unique event names used in H&E subset" = health_econ_events_ok, 
+			                  "Not permitted unique event names used in H&E subset" = health_econ_events_notok
+    						        )
+    						
+    			return(returnList)
+    			}
+    
+health_econ_events_names(used, allowed)
+```
+
+As we can see we have 32 permitted names and 42 not permitted names in the H&E subset. Our goal is to map all
+not permitted names to the 48 permitted event names.
+	
+Let's have a look on the list of the 48 permitted event names.
+      
+```{r}
+allowed
+```
+      
+One property of the permited name cathes the eye right away - none of the permitted names are in plural and/or have letter "S" as last letter.
+  
+```{r}
+# Let's check this observation
+table(substr(allowed, nchar(notok_global), nchar(allowed)) == "S")
+    	
+# Now let's check which not permitted names end with letter "S"
+notok_global[substr(notok_global, nchar(notok_global), nchar(notok_global)) == "S"]
+    	
+# Check which not permitted names would converge to a permitted form if they would have their last letter "S" removed
+notok_global_S<-notok_global[substr(notok_global, nchar(notok_global), nchar(notok_global)) == "S"]
+    	                                    
+notok_global_noS<-substr(notok_global_S, 1, nchar(notok_global_S)-1)
+    	
+intersect(notok_global_noS, allowed)
+    	
+# This non permitted names would not converget to a known permitted name if they would have their last letter "S" removed:
+# "LANDSLIDES", "HIGH SEAS", "ROUGH SEAS"
+# For now we will still remove their last letter and take a mental note of this 
+    	
+# Remove plural names that end with letter "S" from the not permitted names used to file H&E subset events
+stormdata_9611_health_econ_no0<-mutate(stormdata_9611_health_econ_no0, 
+					                            events=ifelse(substr(stormdata_9611_health_econ_no0$events, 
+                  								    nchar(stormdata_9611_health_econ_no0$events), 
+                  								    nchar(stormdata_9611_health_econ_no0$events)
+                  								    )=="S", 
+                  							      substr(stormdata_9611_health_econ_no0$events, 
+                        								    1, 
+                        								    nchar(stormdata_9611_health_econ_no0$events)-1
+                  								          ), 
+                        						        stormdata_9611_health_econ_no0$events
+          							                           )
+                        				      )
+	
+# Let's see how did this rule influence the H&E subset
+used<-sort(unique(stormdata_9611_health_econ_no0$events))
+health_econ_events_names(used, allowed)
+```
+
+In the revision summary on the first page of the above mentioned NWSI document we can find that: 
+"The event name of Landslide was renamed to Debris Flow." 
+```{r}
+stormdata_9611_health_econ_no0<-mutate(stormdata_9611_health_econ_no0, events=ifelse(stormdata_9611_health_econ_no0$events == "LANDSLIDE", "DEBRIS FLOW", stormdata_9611_health_econ_no0$events))
+```
+
+What we can also notice that permitted names do not allow the "TSTM" of the "THUNDERSTORM" event name
+```{r}
+# Check if there is "TSTM" among permitted event names 
+grep("TSTM",allowed,value=TRUE)
+# Substitute all "TSTM" for "THUNDERSTORM" in the H&E subet
+stormdata_9611_health_econ_no0$events<-sub("TSTM","THUNDERSTORM", stormdata_9611_health_econ_no0$events)
+```
+
+As there are no other obvious differences between not permitted names used in the H&E subet and permitted names, we will proceed with a different approach
+```{r}
+# Break all not permitted names into separate words and check which of them are the most common. 
+health_econ_events_notok_split<-sort(table(unlist(strsplit(unlist(strsplit(notok_global, " ")), "/"))))
+health_econ_events_notok_split
+```
+    	
+```{r}
+# Let's take the most occuring word of the not permitted names 
+# Check how many permitted names does it occure in
+grep("SURF",allowed,value=TRUE)
+    
+# "SURF" occures only in one permitted name "HIGH SURF". 
+# Given this fact and the fact that it is the most occuring word in not permitted names
+# makes it a good candidate for name convergence.
+    
+# Let's check which not permitted names contain word "SURF" to check if we really can converge them all to "HIGH SURF".
+grep("SURF",notok_global,value=TRUE)
+    
+# Yes we can  converge them all to "HIGH SURF"
+stormdata_9611_health_econ_no0$events[grepl("SURF", stormdata_9611_health_econ_no0$events)]<-"HIGH SURF"
+```
+  
+Let implement similar approach to the next most occuring word of the not permitted names "WIND"
+```{r}
+# Permitted names:
+grep("WIND",allowed,value=TRUE)
+    	
+# Not permitted names:
+grep("WIND",notok_global,value=TRUE)
+    	
+# This is not the best case for automatic matching 
+# as word "WIND" is also quite frequent between permitted names.
+# We shall converge this way:
+# "EXTREME WINDCHILL"		    --> "EXTREME COLD/WIND CHILL"      
+# "GUSTY WIND"			        --> "STRONG WIND"             
+# "WIND"				          --> "STRONG WIND"
+# "THUNDERSTORM WIND/HAIL" 	  --> "THUNDERSTORM WIND"
+    	
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "EXTREME WINDCHILL"]<-"EXTREME COLD/WIND CHILL"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "GUSTY WIND" | stormdata_9611_health_econ_no0$events == "WIND"]<-"STRONG WIND"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "THUNDERSTORM WIND/HAIL"]<-"THUNDERSTORM WIND"
+```
+
+Same approach for "SNOW"
+```{r}
+# Permitted names:
+grep("SNOW",allowed,value=TRUE)
+      	
+# Not permitted names:
+grep("SNOW",notok_global,value=TRUE)
+      	
+# There is no clear way to map 
+# "BLOWING SNOW", "LIGHT SNOW", "RAIN/SNOW" to either "HEAVY SNOW", "LAKE-EFFECT SNOW"
+# All three names are winter related, let's check what "WINTER" offers among permitted names
+grep("WINTER",allowed,value=TRUE)
+      	
+# We can map "BLOWING SNOW", "LIGHT SNOW" to "WINTER WEATHER"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "BLOWING SNOW" | stormdata_9611_health_econ_no0$events == "LIGHT SNOW"]<-"WINTER WEATHER"
+      	
+      	
+# As for "RAIN/SNOW", this combination is usually called "sleet". 
+# Let's check if there is "SLEET" among permitted words
+grep("SLEET",allowed,value=TRUE)
+      	
+# Yes, there is. We will map "RAIN/SNOW" to "SLEET"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "RAIN/SNOW"]<-"SLEET"
+```
+
+Same approach for "TYPHOON"
+```{r}
+# Permitted names:
+grep("TYPHOON",allowed,value=TRUE)
+    	
+# Not permitted names:
+grep("TYPHOON",notok_global,value=TRUE)
+    	
+# We can see that permitted names dataset treats hurricanes and typhoones as on type of event
+# Check for "HURRICANE" among not permitted names:
+grep("HURRICANE",notok_global,value=TRUE)
+    	
+# We can converge "HURRICANE", "HURRICANE/TYPHOON", "TYPHOON" to "HURRICANE (TYPHOON)"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "HURRICANE" | stormdata_9611_health_econ_no0$events == "HURRICANE/TYPHOON" | stormdata_9611_health_econ_no0$events == "TYPHOON"]<-"HURRICANE (TYPHOON)"
+```
+
+
+Same approach for "STORM"
+```{r}
+# Permitted names:
+grep("STORM",allowed,value=TRUE)
+    	
+# Not permitted names:
+grep("STORM",notok_global,value=TRUE)
+    	
+# It is hard to map "COASTAL STORM" straight a way. Let's have a closer look and first see what we know about this event(s)
+stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events == "COASTAL STORM",]
+    	
+# Now we'll see when did this event occure exactly 
+stormdata[toupper(stormdata$EVTYPE) == "COASTAL STORM" & stormdata$years == 1996 & stormdata$STATE == "NY",][,2]
+    	
+# We can see that this event happend either on December 6th or 7th 1996. Exact date is not important, 
+# what is important is tha now we know that this event happened in the winter.
+    	
+# We can converge "COASTAL STORM" and "STORM SURGE" following way:
+# "COASTAL STORM"	--> "WINTER STORM"
+# "STORM SURGE"	--> "STORM SURGE/TIDE"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "COASTAL STORM"]<-"WINTER STORM"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "STORM SURGE"]<-"STORM SURGE/TIDE"
+```
+
+Same approach for "SEA"<->"SEAS" /Remember that we have removed the last letter "S".
+```{r}
+# Permitted names:
+grep("SEAS",allowed,value=TRUE)
+    	
+# Not permitted names:
+grep("SEA",notok_global,value=TRUE)
+    	
+# There are no permitted event names that contain word "SEAS" in them.
+# Let check the list of the permitted event names and see if there are any names with some word synonimous to "SEA"
+allowed
+    	
+# Names containig "MARINE" could offer alternatives. Let's take a look at them
+grep("MARINE",allowed,value=TRUE)	
+    	
+# None of this names relate to "HIGH SEAS" and "ROUGH SEAS"
+    	
+# Lets have a closer look at "HIGH SEA" events in H&E subset 
+# /Note that we use "HIGH SEA" as we have removed all last letters from H&E sebset event names that end with an "S".
+stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events == "HIGH SEA",]
+  	
+# We have one event that happened on 11/9/2002 in Puerto Rico.
+    	
+# Now we can check if there had been any SEA-related events on that date
+factor(stormdata[stormdata$BGN_DATE == "11/9/2002 0:00:00" | stormdata$END_DATE == "11/9/2002 0:00:00",][,8])
+    	
+# Sice there are no obvious choices, we can check if there have been other events on that date in marine areas near Puerto Rico.
+# Let's check which states and areas have had events on this date
+sort(table(stormdata[stormdata$BGN_DATE == "11/9/2002 0:00:00" | stormdata$END_DATE == "11/9/2002 0:00:00",][,7]))
+    	
+# No marine areas have had events on this date.
+# It appears like there are no sound ways to map "HIGH SEAS" to a permitted event name. We might consider omitting it.
+    	
+# Now we will try appling similar tactics for "ROUGH SEAS"
+# "ROUGH SEAS" events in H&E subset
+stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events == "ROUGH SEA",]
+# Other events on 8/15/2000 0:00:00 in California
+factor(stormdata[(stormdata$BGN_DATE == "8/15/2000 0:00:00" | stormdata$END_DATE == "8/15/2000 0:00:00") & stormdata$STATE == "CA",][,8])
+# No SEA-related events. Check other areas that have events on that date
+sort(table(stormdata[stormdata$BGN_DATE == "8/15/2000 0:00:00" | stormdata$END_DATE == "8/15/2000 0:00:00",][,7]))
+    	
+# No marine areas have had events on this date.
+# It appears like there are no sound ways to map "ROUGH SEAS" to a permitted event name. We might consider omitting it.
+    	
+# Before excluding "HIGH SEAS" and "ROUGH SEAS" events from the H&E subset, let's check how much do they contribute to the health and economic impact of all events.
+    	
+hs<-stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events == "HIGH SEA",]
+rs<-stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events == "ROUGH SEA",]
+hs
+rs
+    	
+# Both event had no economic impact filed.
+# Calculate health impact
+# Percent of total fatalities:
+round((sum(hs$fatalities, rs$fatalities)/sum(stormdata_9611_health_econ_no0$fatalities))*100, 3)
+# Percent of total injuries:
+round((sum(hs$injuries, rs$injuries)/sum(stormdata_9611_health_econ_no0$injuries))*100, 3)
+    	
+# Based on very small health impact and non existant economic impact we can for now choose to exclude "HIGH SEAS" and "ROUGH SEAS" events from the H&E subset.
+# We will reevaluate this choice before presenting final results
+stormdata_9611_health_econ_no0<-stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events != "HIGH SEA" & stormdata_9611_health_econ_no0$events != "ROUGH SEA",]
+```	
+      	
+Same approach for "RIVER"
+
+```{r}
+# Permitted names:
+grep("RIVER",allowed,value=TRUE)
+      	
+# Not permitted names:
+grep("RIVER",notok_global,value=TRUE)	
+    	
+# There are no "RIVER" related event names among permitted names,
+# but we can see that the events in question are floods.
+# Check for "FLOOD" among permitted names.
+grep("FLOOD",allowed,value=TRUE)
+      
+# We can converge both "RIVER FLOOD" and "RIVER FLOODING" to "FLOOD"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "RIVER FLOOD" | stormdata_9611_health_econ_no0$events == "RIVER FLOODING"]<-"FLOOD"
+```
+Same approach for "COLD"
+```{r}
+# Permitted names:
+grep("COLD",allowed,value=TRUE)
+    	
+# Not permitted names:
+grep("COLD",notok_global,value=TRUE)
+    	
+# We can converge "COASTAL STORM" and "STORM SURGE" following way:
+# "COLD"	--> "COLD/WIND CHILL"
+# "EXTREME COLD"	--> "EXTREME COLD/WIND CHILL"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "COLD"]<-"COLD/WIND CHILL"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "EXTREME COLD"]<-"EXTREME COLD/WIND CHILL"	
+```
+  
+Let's have a look on our progress so far
+```{r}
+used<-sort(unique(stormdata_9611_health_econ_no0$events))
+health_econ_events_names(used, allowed)
+```
+      
+We still have 14 not permitted names. They contain these words
+```{r}
+health_econ_events_notok_split<-sort(table(unlist(strsplit(unlist(strsplit(notok_global, " ")), "/"))))
+health_econ_events_notok_split
+```
+As we have dealt with the most common words we will change strategy again and try to generate suggestions for 
+all remaining words in one go. After that we will try to map them on best effort basis.	
+  
+```{r}
+# Create a function that will generate mapping suggestions 
+map_suggestions<-function(x) {
+      	# Permitted names:
+    		p_names<-grep(x,allowed,value=TRUE)
+    		# Not permitted names:
+    		np_names<-grep(x,notok_global,value=TRUE)
+    		
+    		returnList <- list("Word" = x, "Permitted names" = p_names, "Not permitted names" = np_names )
+    						
+    		return(returnList)
+    	      }
+    	      
+# Make a vector of the remaining words
+word_np<-unlist(strsplit(unlist(strsplit(notok_global, " ")), "/"))
+# Generate suggestions for each word 
+sug<-lapply(word_np, map_suggestions)
+str(sug)
+    	
+# Going through this list we can see following strate forward mapping suggestions:
+# "FOG"			-> "DENSE FOG"
+# "FREEZE"		-> "FROST/FREEZE"
+# "FROST"		-> "FROST/FREEZE"
+# "SMALL HAIL"		-> "HAIL"
+# "WILD/FOREST FIRE"	-> "WILDFIRE"
+# "WINTER WEATHER/MIX"	-> "WINTER WEATHER"
+    	
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "FOG"]<-"DENSE FOG"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "FREEZE" | stormdata_9611_health_econ_no0$events == "FROST"]<-"FROST/FREEZE"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "SMALL HAIL"]<-"HAIL"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "WILD/FOREST FIRE"]<-"WILDFIRE"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "WINTER WEATHER/MIX"]<-"WINTER WEATHER"
+    	
+# We still have to deal with 8 not permitted names. We can map them the following way:
+# "BLACK ICE"			-> "WINTER WEATHER"
+# "ICY ROAD"			-> "WINTER WEATHER"
+# "FREEZING DRIZZLE"		-> "ICE STORM"
+# "GLAZE"			-> "ICE STORM"
+# "URBAN/SML STREAM FLD"	-> "FLOOD"
+# "DRY MICROBURST"		-> "STRONG WIND"
+# "MIXED PRECIP"		-> "SLEET"
+  	
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "BLACK ICE" | stormdata_9611_health_econ_no0$events == "ICY ROAD"]<-"FROST/FREEZE"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "FREEZING DRIZZLE" | stormdata_9611_health_econ_no0$events == "GLAZE"]<-"FROST/FREEZE"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "URBAN/SML STREAM FLD"]<-"FLOOD"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "DRY MICROBURST"]<-"STRONG WIND"
+stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "MIXED PRECIP"]<-"SLEET"
+    	
+used<-sort(unique(stormdata_9611_health_econ_no0$events))
+health_econ_events_names(used, allowed)
+```
+	
+"MARINE ACCIDENT" will require more insight 
+```{r}
+# "MARINE ACCIDENT" events in H&E subset
+stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events == "MARINE ACCIDENT",]
+# Other events on 12/2/1996 in California
+factor(stormdata[(stormdata$BGN_DATE == "12/2/1996 0:00:00" | stormdata$END_DATE == "12/2/1996 0:00:00")& stormdata$STATE == "CA",][,8])
+# This is the only event on that day in California. Check other areas that have had events on that date
+sort(table(stormdata[stormdata$BGN_DATE == "12/2/1996 0:00:00" | stormdata$END_DATE == "12/2/1996 0:00:00",][,7]))
+    	
+# There are no marine area events reported on same day. We might consider omitting this particular event from the H&E subset.
+    	
+ma<-stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events == "MARINE ACCIDENT",]
+ma
+    	
+# This event presumably resulted in $50000 of property damage. For now we can not evaluate this number as we have to tidy up economic data first. 
+    	
+# Calculate health impact
+# Percent of total fatalities:
+round((sum(ma$fatalities)/sum(stormdata_9611_health_econ_no0$fatalities))*100, 3)
+# Percent of total injuries:
+round((sum(ma$injuries)/sum(stormdata_9611_health_econ_no0$injuries))*100, 3)
+    	
+# Based on very small health impact and impact we can for now choose to exclude "MARINE ACCIDENT" event from the H&E subset.
+stormdata_9611_health_econ_no0<-stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events != "MARINE ACCIDENT",]
+```
+
+Finally let's check once again the state of event names used in the H&E subset.
+	
+```{r}
+used<-sort(unique(stormdata_9611_health_econ_no0$events))
+health_econ_events_names(used, allowed)
+```
+  
+There are no not permitted events in the dataset. This concludes event name formatting section.
+	
+## FURTHER DATA PROCESSING	
+
+Now we will format "prop_dmg_exp" and "crop_dmg_exp" columns. These are multipliers for relevant damage columns.
+	
+```{r}
+# Check which multipliers we have.
+table(factor(stormdata_9611_health_econ_no0$prop_dmg_exp))
+table(factor(stormdata_9611_health_econ_no0$crop_dmg_exp))
+    	
+# We shal treat K as thousands, M as millions, B as billions
+# K --> 1000
+# M --> 1000000	
+# B --> 1000000000
+    	
+# Conver letter multipliers to relevant numbers
+pc<-stormdata_9611_health_econ_no0$prop_dmg_exp
+cc<-stormdata_9611_health_econ_no0$crop_dmg_exp
+  	
+pc<- sapply(pc, as.character)
+pc[pc == ""]<-1
+pc[pc == "K"]<-1e3
+pc[pc == "M"]<-1e6
+pc[pc == "B"]<-1e9
+    	
+cc<- sapply(cc, as.character)
+cc[cc == ""]<-1
+cc[cc == "K"]<-1e3
+cc[cc == "M"]<-1e6
+cc[cc == "B"]<-1e9
+    
+stormdata_9611_health_econ_no0<-cbind(stormdata_9611_health_econ_no0, pc, cc)
+    
+stormdata_9611_health_econ_no0$pc<-as.numeric(levels(stormdata_9611_health_econ_no0$pc))[stormdata_9611_health_econ_no0$pc]
+stormdata_9611_health_econ_no0$cc<-as.numeric(levels(stormdata_9611_health_econ_no0$cc))[stormdata_9611_health_econ_no0$cc]
+    	
+# Create property and crop damage toll columns with complete sums in H&E subset
+stormdata_9611_health_econ_no0$prop_toll<-stormdata_9611_health_econ_no0$prop_dmg * stormdata_9611_health_econ_no0$pc
+stormdata_9611_health_econ_no0$crop_toll<-stormdata_9611_health_econ_no0$crop_dmg * stormdata_9611_health_econ_no0$cc
+```	
+
+Now we will tidy up the final H&E subset
+
+```{r}
+# Create the tidy H&E subset containing only the data we need for our analysis
+tidy_stormdata_9611_health_econ_no0<-stormdata_9611_health_econ_no0[c("years", "events", "fatalities", "injuries", "prop_toll", "crop_toll")]
+    	
+# Check for missing data
+table(!is.na(tidy_stormdata_9611_health_econ_no0))
+```
+
+We will present health and economic impact data by event type in  order to determine which are the most harmful events across USA.
+
+This will require some more data formatting
+
+  
+```{r}
+
+# Melt data by "events" 
+tidy_stormdata_9611_health_econ_no0_melt<-melt(tidy_stormdata_9611_health_econ_no0, 
+                                                    id = c("years", "events"),
+                                                    measure.vars=c("fatalities", "injuries",                                                                "prop_toll", "crop_toll"))
+    	
+# Cast to calculate means 
+tidy_stormdata_9611_health_econ_no0_means<-dcast(tidy_stormdata_9611_health_econ_no0_melt, 
+                                                 events  ~ variable, 
+                                                 mean
+                                                 )
+    	
+# Melt again
+tidy_stormdata_9611_health_econ_no0_means_melt<-melt(tidy_stormdata_9611_health_econ_no0_means,id = c("events"), measure.vars=c("fatalities", "injuries", "prop_toll", "crop_toll"))
+    	                                                         
+# Rename columns
+names(tidy_stormdata_9611_health_econ_no0_melt)[3:4]<-c("damage_type", "damage_value")
+names(tidy_stormdata_9611_health_econ_no0_means_melt)[2:3]<-c("damage_type", "damage_mean")
+    	
+    	
+# Merge two melted datasets by events, to add mean values for each event type
+tidy_stormdata_9611_health_econ_no0_withmeans<-merge(tidy_stormdata_9611_health_econ_no0_melt,
+                                                     tidy_stormdata_9611_health_econ_no0_means_melt,
+                                                     c("events", "damage_type")
+	                                                   )
+      
+# Exclude all events that have damage_value = 0
+tidy_stormdata_9611_health_econ_no0_withmeans_damval<-tidy_stormdata_9611_health_econ_no0_withmeans[tidy_stormdata_9611_health_econ_no0_withmeans$damage_value > 0,]
+ 
+# Add a column that specifies the type of mean value in "damage_mean" column
+tidy_stormdata_9611_health_econ_no0_withmeans_damval$mean_type<-"fatalities mean"
+tidy_stormdata_9611_health_econ_no0_withmeans_damval[tidy_stormdata_9611_health_econ_no0_withmeans_damval$damage_type == "injuries",]$mean_type<-"injuries mean"
+tidy_stormdata_9611_health_econ_no0_withmeans_damval[tidy_stormdata_9611_health_econ_no0_withmeans_damval$damage_type == "prop_toll",]$mean_type<-"prop_toll mean"
+tidy_stormdata_9611_health_econ_no0_withmeans_damval[tidy_stormdata_9611_health_econ_no0_withmeans_damval$damage_type == "crop_toll",]$mean_type<-"crop_toll mean"
+    	
+# Subset health imapact related data
+health_data<-tidy_stormdata_9611_health_econ_no0_withmeans_damval[tidy_stormdata_9611_health_econ_no0_withmeans_damval$damage_type == "fatalities" | tidy_stormdata_9611_health_econ_no0_withmeans_damval$damage_type == "injuries",]
+# Subset economic imapact related data
+econ_data<-tidy_stormdata_9611_health_econ_no0_withmeans_damval[tidy_stormdata_9611_health_econ_no0_withmeans_damval$damage_type == "prop_toll" | tidy_stormdata_9611_health_econ_no0_withmeans_damval$damage_type == "crop_toll",]
+   	
+# Add a column with total number of events of sames type that have caused health damage
+add_count<-health_data
+add_count$number_of_events<-NA
+add_count_melt<-melt(add_count, id = c("events"), measure.vars=c("number_of_events"))
+add_count_cast<-dcast(add_count_melt, events ~ variable, length)
+health_data<-merge(health_data, add_count_cast, c("events"))
+  	
+# Add column with X-axis labels that include event names and number of times events with health impact occured 
+health_data$X_label<-paste(health_data$events, " [", health_data$number_of_events, "]")
+      
+# Add a column with number of events of sames type that have caused economic damage
+add_count<-econ_data
+add_count$number_of_events<-NA
+add_count_melt<-melt(add_count, id = c("events"), measure.vars=c("number_of_events"))
+add_count_cast<-dcast(add_count_melt, events ~ variable, length)
+econ_data<-merge(econ_data, add_count_cast, c("events"))
+    	
+# Add column with X-axis labels that include event names and number of times events with economic impact occured 
+econ_data$X_label<-paste(econ_data$events, " [", econ_data$number_of_events, "]")
+```	
+
+      
+Now we can adress the first question: 
+
+**Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?**
+
+```{r fig.width=16, fig.height=10}
+# Plotting health impact related data
+
+health_plot<-ggplot(data=health_data, aes(x=X_label, y=damage_value))
+health_plot + theme_bw() + 
+geom_jitter(alpha=0.5, aes(color=damage_type),position = position_jitter(width = .2)) +
+scale_colour_tableau() +
+geom_point(aes(y=damage_mean, shape=mean_type)) + 
+theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+labs(title="Number of injuries and fatalities \n caused by StormData events in US in years 1996-2011", x="EVENTS [TOTAL NUMBER OF OCCURENCES]", y="NUMBER OF INJURIES AND FATALITIES") +
+theme(plot.title = element_text(size=25, face="bold", vjust=2)) +
+theme(axis.title=element_text(size=15,face="bold")) +
+theme(legend.title = element_text(size=10, face="bold"))
+```
+
+
+Moving to the second question: 
+
+**Across the United States, which types of events have the greatest economic consequences?**
+	
+```{r}
+    	
+# Economic damage value might be quite large which will result in less readable plots.
+# Let's examine the "value" and "seas_reg_mean" column of the econ_plot_data subset.
+summary(econ_data$damage_value)
+summary(econ_data$damage_mean)
+    	
+# Difference between min and max values is indeed large. 
+# It makes sence to convert them to their log10 values.
+econ_data_log10<-mutate(econ_data, damage_value=log10(damage_value))
+econ_data_log10<-mutate(econ_data_log10, damage_mean=log10(damage_mean))
+```
+    	
+```{r fig.width=16, fig.height=10}
+# Plotting economic impact related data
+      
+econ_plot<-ggplot(data=econ_data_log10, aes(x=X_label, y=damage_value))
+econ_plot + theme_bw() + 
+geom_jitter(alpha=0.5, aes(color=damage_type),position = position_jitter(width = .2)) +
+scale_colour_tableau() +
+geom_point(aes(y=damage_mean, shape=mean_type)) + 
+theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+labs(title="Total property and crop damage \n caused by StormData events in US in years 1996-2011", x="EVENTS [TOTAL NUMBER OF OCCURENCES]", y="Log10(TOTAL DAMAGE IN USD) ") +
+theme(plot.title = element_text(size=25, face="bold", vjust=2)) +
+theme(axis.title=element_text(size=15,face="bold")) +
+theme(legend.title = element_text(size=10, face="bold"))
+```
+
+	
+# RESULTS
+
+## HEALTH IMPACT PLOT INTERPRETATION
+
+Inspecting the health data plot we can see that it looks like a reare event **"TSUNAMI"** has the highest mean number of fatalities and injuries while **"TORNADO"** is the most frequent event. We will confirm this by pulling data from source tables.
+
+**We shall start with the number of fatalities:**
+```{r}
+fat_health_data<-health_data[health_data$damage_type=="fatalities",]
+fat_summary<-summary(fat_health_data$damage_mean)
+fat_summary
+```
+
+We can see that there is an event that obviously stands out with a mean number of fatalities of **`r max(fat_health_data$damage_mean)`**. This event is **`r fat_health_data[fat_health_data$damage_mean==max(fat_health_data$damage_mean),]$events`**.
+
+Although **`r fat_health_data[fat_health_data$damage_mean==max(fat_health_data$damage_mean),]$events`** is a devastating event, it is not the most frequent. In years 1996-2011 there have been **`r unique(fat_health_data[fat_health_data$events==fat_health_data[fat_health_data$damage_mean==max(fat_health_data$damage_mean),]$events,]$number_of_events)`** events of this type.
+
+The most frequent event with fatal consequences happened **`r max(unique(fat_health_data$number_of_events))`** times. This event is **`r unique(fat_health_data[fat_health_data$number_of_events==max(unique(fat_health_data$number_of_events)),]$events)`**. The mean number of fatalities this event caused each time is **`r unique(fat_health_data[fat_health_data$events==unique(fat_health_data[fat_health_data$number_of_events==max(unique(fat_health_data$number_of_events)),]$events),]$damage_mean)`**.
+
+
+**Now, let's inspect the injuries data:**
+```{r}
+inj_health_data<-health_data[health_data$damage_type=="injuries",]
+inj_summary<-summary(inj_health_data$damage_mean)
+inj_summary
+```
+
+We can see that there is an event that obviously stands out with a mean number of injuries of **`r max(inj_summary)`**.
+
+Same as with fatalities, the event with the highest mean number of injuries is **`r inj_health_data[inj_health_data$damage_mean==max(inj_summary),]$events`**.
+
+We already now that it is not a frequent event, so we will check again how high is the mean number of injuries of the most frequent injury causing event.
+
+The most frequent injury causing event happened **`r max(unique(inj_health_data$number_of_events))`** times. This event is (same as in case of fatalities) **`r unique(inj_health_data[inj_health_data$number_of_events==max(unique(inj_health_data$number_of_events)),]$events)`**. The mean number of injuries this event caused each time is **`r unique(inj_health_data[inj_health_data$events==unique(inj_health_data[inj_health_data$number_of_events==max(unique(inj_health_data$number_of_events)),]$events),]$damage_mean)`**.
+
+
+## ECONOMIC DAMAGE PLOT INTERPRETATION
+
+Looking at the property and crops damage plot, we can see that events like **"DROUGHT"**, **"FLOOD"**, **"HURRICANE (TYPHOON)"**, **"TORNADO"**, **"TROPICAL STORM"**, **"TSUNAMI"**, and **"WILDFIRE"** stand out in terms of high damage mean values, while **"FLASH FLOOD"**, **"FLOOD"**,**"HAIL"**, **"THUNDERSTORM WIND"** and **"TORANDO"** stand out in terms of high event frequency. Again, we will confirm these observations by pulling data from source tables.
+
+**Let's see how is the property damage data distributed.**
+```{r}
+prop_econ_data<-econ_data[econ_data$damage_type=="prop_toll",]
+prop_summary<-summary(prop_econ_data$damage_mean)
+prop_summary
+```
+
+Event with max property damage mean is **`r unique(prop_econ_data[prop_econ_data$damage_mean==max(prop_econ_data$damage_mean),]$events)`**
+
+Let's check which were the second and third most property damaging events.
+
+Second:
+**`r unique(prop_econ_data[prop_econ_data$damage_mean==(unique(prop_econ_data[order(prop_econ_data$damage_mean, decreasing = TRUE),]$damage_mean))[2],]$events)`** (mean preperty damage of **$`r (unique(prop_econ_data[order(prop_econ_data$damage_mean, decreasing = TRUE),]$damage_mean))[2]`**).
+
+Third:
+**`r unique(prop_econ_data[prop_econ_data$damage_mean==(unique(prop_econ_data[order(prop_econ_data$damage_mean, decreasing = TRUE),]$damage_mean))[3],]$events)`** (mean preperty damage of **$`r (unique(prop_econ_data[order(prop_econ_data$damage_mean, decreasing = TRUE),]$damage_mean))[3]`**).
+
+Next let's see what mean property damage was caused by five most frequent property damaging events.
+
+**`r unique(prop_econ_data[prop_econ_data$number_of_events==(unique(prop_econ_data[order(prop_econ_data$number_of_events, decreasing = TRUE),]$number_of_events))[1],]$events)`** (mean preperty damage of **$`r (unique(prop_econ_data[order(prop_econ_data$number_of_events, decreasing = TRUE),]$damage_mean))[1]`**).
+
+**`r unique(prop_econ_data[prop_econ_data$number_of_events==(unique(prop_econ_data[order(prop_econ_data$number_of_events, decreasing = TRUE),]$number_of_events))[2],]$events)`** (mean preperty damage of **$`r (unique(prop_econ_data[order(prop_econ_data$number_of_events, decreasing = TRUE),]$damage_mean))[2]`**).
+
+**`r unique(prop_econ_data[prop_econ_data$number_of_events==(unique(prop_econ_data[order(prop_econ_data$number_of_events, decreasing = TRUE),]$number_of_events))[3],]$events)`** (mean preperty damage of **$`r (unique(prop_econ_data[order(prop_econ_data$number_of_events, decreasing = TRUE),]$damage_mean))[3]`**).
+
+**`r unique(prop_econ_data[prop_econ_data$number_of_events==(unique(prop_econ_data[order(prop_econ_data$number_of_events, decreasing = TRUE),]$number_of_events))[4],]$events)`** (mean preperty damage of **$`r (unique(prop_econ_data[order(prop_econ_data$number_of_events, decreasing = TRUE),]$damage_mean))[4]`**).
+
+**`r unique(prop_econ_data[prop_econ_data$number_of_events==(unique(prop_econ_data[order(prop_econ_data$number_of_events, decreasing = TRUE),]$number_of_events))[5],]$events)`** (mean preperty damage of **$`r (unique(prop_econ_data[order(prop_econ_data$number_of_events, decreasing = TRUE),]$damage_mean))[5]`**).
+
+
+
+**Below we will inspect crops damaging events in similar fashion.**
+
+Crop damage data distribution.
+```{r}
+crop_econ_data<-econ_data[econ_data$damage_type=="crop_toll",]
+crop_summary<-summary(crop_econ_data$damage_mean)
+crop_summary
+```
+
+Event with max crop damage mean is **`r unique(crop_econ_data[crop_econ_data$damage_mean==max(crop_econ_data$damage_mean),]$events)`**
+
+
+Let's check which were the second and third most property damaging events.
+
+Second:
+**`r unique(crop_econ_data[crop_econ_data$damage_mean==(unique(crop_econ_data[order(crop_econ_data$damage_mean, decreasing = TRUE),]$damage_mean))[2],]$events)`** (mean preperty damage of **$`r (unique(crop_econ_data[order(crop_econ_data$damage_mean, decreasing = TRUE),]$damage_mean))[2]`**).
+
+Third:
+**`r unique(crop_econ_data[crop_econ_data$damage_mean==(unique(crop_econ_data[order(crop_econ_data$damage_mean, decreasing = TRUE),]$damage_mean))[3],]$events)`** (mean preperty damage of **$`r (unique(crop_econ_data[order(crop_econ_data$damage_mean, decreasing = TRUE),]$damage_mean))[3]`**).
+
+
+Next let's see what mean property damage was caused by five most frequent property damaging events.
+
+**`r unique(crop_econ_data[crop_econ_data$number_of_events==(unique(crop_econ_data[order(crop_econ_data$number_of_events, decreasing = TRUE),]$number_of_events))[1],]$events)`** (mean preperty damage of **$`r (unique(crop_econ_data[order(crop_econ_data$number_of_events, decreasing = TRUE),]$damage_mean))[1]`**).
+
+**`r unique(crop_econ_data[crop_econ_data$number_of_events==(unique(crop_econ_data[order(crop_econ_data$number_of_events, decreasing = TRUE),]$number_of_events))[2],]$events)`** (mean preperty damage of **$`r (unique(crop_econ_data[order(crop_econ_data$number_of_events, decreasing = TRUE),]$damage_mean))[2]`**).
+
+**`r unique(crop_econ_data[crop_econ_data$number_of_events==(unique(crop_econ_data[order(crop_econ_data$number_of_events, decreasing = TRUE),]$number_of_events))[3],]$events)`** (mean preperty damage of **$`r (unique(crop_econ_data[order(crop_econ_data$number_of_events, decreasing = TRUE),]$damage_mean))[3]`**).
+
+**`r unique(crop_econ_data[crop_econ_data$number_of_events==(unique(crop_econ_data[order(crop_econ_data$number_of_events, decreasing = TRUE),]$number_of_events))[4],]$events)`** (mean preperty damage of **$`r (unique(crop_econ_data[order(crop_econ_data$number_of_events, decreasing = TRUE),]$damage_mean))[4]`**).
+
+**`r unique(crop_econ_data[crop_econ_data$number_of_events==(unique(crop_econ_data[order(crop_econ_data$number_of_events, decreasing = TRUE),]$number_of_events))[5],]$events)`** (mean preperty damage of **$`r (unique(crop_econ_data[order(crop_econ_data$number_of_events, decreasing = TRUE),]$damage_mean))[5]`**).
+
+##RESULTS SUMMARY
+
+**In years 1996-2011 with respect of population health tornados were the most damaging events with tsunamies being the most harmful on per event basis.**
+
+**With respect of economic damage hurricanes (typhoones) events were the most devastating (causing highest mean damage) while hail, tornados, thunderstorm winds, floods and flash floods were the most frequent events and cause the most total damage in years 1996-2011.**

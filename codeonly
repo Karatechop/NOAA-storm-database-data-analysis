@@ -1,0 +1,808 @@
+https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2
+
+require(dplyr)
+require(reshape2)
+require(lubridate)
+require(ggplot2)
+
+
+stormdata<-read.csv("repdata-data-StormData.csv.bz2")
+
+years<-sapply(strsplit(as.character(stormdata$BGN_DATE)," ",fixed = TRUE),"[[",1)
+years<-sapply(strsplit(years,"/",fixed = TRUE),"[[",3)
+years<-as.data.frame(years)
+
+events_by_years<-data.frame(years=as.numeric(levels(years$years)[years$years]), events=stormdata$EVTYPE)
+unique_events_by_years<-aggregate(events~years, events_by_years, n_distinct)
+
+unique_events_by_years_plot<- qplot(x=years, y=events, data=unique_events_by_years, geom="bar", stat="identity", main = "Number of unique StormData events by years", xlab = "year", ylab = "unique events num")
+unique_events_by_years_plot + scale_x_continuous(breaks=1950:2011) + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+event_conseq<-data.frame(years=as.numeric(levels(years$years)[years$years]), fatalities=stormdata$FATALITIES, injuries=stormdata$INJURIES)
+
+upto1992<-event_conseq[(event_conseq$years<=1992),]
+
+round(100*sum(upto1992$fatalities)/sum(event_conseq$fatalities))
+
+round(100*sum(upto1992$injuries)/sum(event_conseq$injuries))
+
+stormdata$years<-as.numeric(levels(years$years)[years$years])
+stormdata_9611<-filter(stormdata, stormdata$years>1995)
+stormdata_9611_health_econ<-data.frame(years=stormdata_9611$years, date=stormdata_9611$BGN_DATE, state=stormdata_9611$STATE, events=stormdata_9611$EVTYPE, fatalities=stormdata_9611$FATALITIES, injuries=stormdata_9611$INJURIES, prop_dmg=stormdata_9611$PROPDMG, prop_dmg_exp=stormdata_9611$PROPDMGEXP, crop_dmg=stormdata_9611$CROPDMG, crop_dmg_exp=stormdata_9611$CROPDMGEXP)
+
+
+		table(stormdata_9611_health_econ$fatalities==0)
+		table(stormdata_9611_health_econ$injuries==0)
+		table(stormdata_9611_health_econ$prop_dmg==0)
+		table(stormdata_9611_health_econ$crop_dmg==0)
+
+		stormdata_9611_health_econ_no0<-filter(stormdata_9611_health_econ, (stormdata_9611_health_econ$fatalities>0 & stormdata_9611_health_econ$injuries>0) | (stormdata_9611_health_econ$prop_dmg>0 & stormdata_9611_health_econ$crop_dmg>0))
+
+		stormdata_9611_health_econ_no0$events<-as.character(stormdata_9611_health_econ_no0$events)
+
+
+	table(stormdata_9611_health_econ_no0$years)
+
+
+	allowed_events<-data.frame(events=c("Astronomical Low Tide","Avalanche","Blizzard","Coastal Flood","Cold/Wind Chill","Debris Flow","Dense Fog","Dense Smoke","Drought","Dust Devil","Dust Storm","Excessive Heat","Extreme Cold/Wind Chill","Flash Flood","Flood","Frost/Freeze","Funnel Cloud","Freezing Fog","Hail","Heat","Heavy Rain","Heavy Snow","High Surf","High Wind","Hurricane (Typhoon)","Ice Storm","Lake-Effect Snow","Lakeshore Flood","Lightning","Marine Hail","Marine High Wind","Marine Strong Wind","Marine Thunderstorm Wind","Rip Current","Seiche","Sleet","Storm Surge/Tide","Strong Wind","Thunderstorm Wind","Tornado","Tropical Depression","Tropical Storm","Tsunami","Volcanic Ash","Waterspout","Wildfire","Winter Storm","Winter Weather"), stringsAsFactors = F)
+
+
+	allowed_events$events<-toupper(allowed_events$events)
+	stormdata_9611_health_econ_no0$events<-toupper(stormdata_9611_health_econ_no0$events)
+
+	used<-sort(unique(stormdata_9611_health_econ_no0$events))
+	allowed<-sort(allowed_events$events)
+	
+	health_econ_events_names <- function(x,y){
+	
+					
+						health_econ_events_ok<-intersect(x, y)
+						health_econ_events_ok_num<-length(health_econ_events_ok)
+						
+					
+						health_econ_events_notok<-!(x %in% y)
+						health_econ_events_notok<-x[health_econ_events_notok]
+						health_econ_events_notok_num<-length(health_econ_events_notok)
+						
+						notok_global<<-health_econ_events_notok
+						
+						returnList <- list("Number of unique permitted event names used in H&S subset:" = health_econ_events_ok_num, "Number of unique not permitted event names used in H&S subset:"= health_econ_events_notok_num, "Permitted unique event names used in H&S subset" = health_econ_events_ok, "Not permitted unique event names used in H&S subset" = health_econ_events_notok)
+						
+						return(returnList)
+						}
+
+	health_econ_events_names(used, allowed)
+
+
+
+	table(substr(allowed, nchar(notok_global), nchar(allowed)) == "S")
+	
+	
+	notok_global[substr(notok_global, nchar(notok_global), nchar(notok_global)) == "S"]
+	
+
+	notok_global_S<-notok_global[substr(notok_global, nchar(notok_global), nchar(notok_global)) == "S"]
+	notok_global_noS<-substr(notok_global_S, 1, nchar(notok_global_S)-1)
+	intersect(notok_global_noS, allowed)
+	
+	stormdata_9611_health_econ_no0<-mutate(stormdata_9611_health_econ_no0, 
+						events=ifelse(substr(stormdata_9611_health_econ_no0$events, 
+								    nchar(stormdata_9611_health_econ_no0$events), 
+								    nchar(stormdata_9611_health_econ_no0$events)
+								    )=="S", 
+							      substr(stormdata_9611_health_econ_no0$events, 
+								    1, 
+								    nchar(stormdata_9611_health_econ_no0$events)-1
+								    ), 
+						              stormdata_9611_health_econ_no0$events
+							      )
+				              )
+	
+
+	used<-sort(unique(stormdata_9611_health_econ_no0$events))
+	health_econ_events_names(used, allowed)
+
+stormdata_9611_health_econ_no0<-mutate(stormdata_9611_health_econ_no0, events=ifelse(stormdata_9611_health_econ_no0$events == "LANDSLIDE", "DEBRIS FLOW", stormdata_9611_health_econ_no0$events))
+
+
+	grep("TSTM",allowed,value=TRUE)
+
+	stormdata_9611_health_econ_no0$events<-sub("TSTM","THUNDERSTORM", stormdata_9611_health_econ_no0$events)
+
+
+	health_econ_events_notok_split<-sort(table(unlist(strsplit(unlist(strsplit(notok_global, " ")), "/"))))
+	health_econ_events_notok_split
+	
+
+	grep("SURF",allowed,value=TRUE)
+
+
+	grep("SURF",notok_global,value=TRUE)
+
+
+	stormdata_9611_health_econ_no0$events[grepl("SURF", stormdata_9611_health_econ_no0$events)]<-"HIGH SURF"
+
+
+
+
+	grep("WIND",allowed,value=TRUE)
+	
+	
+	grep("WIND",notok_global,value=TRUE)
+	
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "EXTREME WINDCHILL"]<-"EXTREME COLD/WIND CHILL"
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "GUSTY WIND" | stormdata_9611_health_econ_no0$events == "WIND"]<-"STRONG WIND"
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "THUNDERSTORM WIND/HAIL"]<-"THUNDERSTORM WIND"
+
+
+
+	grep("SNOW",allowed,value=TRUE)
+	
+	grep("SNOW",notok_global,value=TRUE)
+	
+
+	grep("WINTER",allowed,value=TRUE)
+	
+
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "BLOWING SNOW" | stormdata_9611_health_econ_no0$events == "LIGHT SNOW"]<-"WINTER WEATHER"
+	
+	
+
+	grep("SLEET",allowed,value=TRUE)
+	
+
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "RAIN/SNOW"]<-"SLEET"
+
+
+
+	grep("TYPHOON",allowed,value=TRUE)
+	
+
+	grep("TYPHOON",notok_global,value=TRUE)
+	
+	grep("HURRICANE",notok_global,value=TRUE)
+	
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "HURRICANE" | stormdata_9611_health_econ_no0$events == "HURRICANE/TYPHOON" | stormdata_9611_health_econ_no0$events == "TYPHOON"]<-"HURRICANE (TYPHOON)"
+
+
+
+
+	grep("STORM",allowed,value=TRUE)
+	
+
+	grep("STORM",notok_global,value=TRUE)
+	
+	stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events == "COASTAL STORM",]
+	
+	stormdata[toupper(stormdata$EVTYPE) == "COASTAL STORM" & stormdata$years == 1996 & stormdata$STATE == "NY",][,2]
+	
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "COASTAL STORM"]<-"WINTER STORM"
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "STORM SURGE"]<-"STORM SURGE/TIDE"
+
+
+	grep("SEAS",allowed,value=TRUE)
+	
+
+	grep("SEA",notok_global,value=TRUE)
+	
+	allowed
+	
+	
+	grep("MARINE",allowed,value=TRUE)
+	stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events == "HIGH SEA",]
+	
+	factor(stormdata[toupper(stormdata$EVTYPE) == "HIGH SEAS" & stormdata$years == 2002 & stormdata$STATE == "PR",][,2])
+	
+	factor(stormdata[ stormdata$BGN_DATE == "11/9/2002 0:00:00",][,8])
+	
+	sort(table(stormdata[stormdata$BGN_DATE == "11/9/2002 0:00:00",][,7]))
+	
+	stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events == "ROUGH SEA",]
+	factor(stormdata[toupper(stormdata$EVTYPE) == "ROUGH SEAS" & stormdata$years == 2000 & stormdata$STATE == "CA",][,2])
+	factor(stormdata[stormdata$BGN_DATE == "8/15/2000 0:00:00" & stormdata$STATE == "CA",][,8])
+	sort(table(stormdata[stormdata$BGN_DATE == "8/15/2000 0:00:00",][,7]))
+	
+	hs<-stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events == "HIGH SEA",]
+	rs<-stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events == "ROUGH SEA",]
+	hs
+	rs
+	
+	round((sum(hs$fatalities, rs$fatalities)/sum(stormdata_9611_health_econ_no0$fatalities))*100, 3)
+	round((sum(hs$injuries, rs$injuries)/sum(stormdata_9611_health_econ_no0$injuries))*100, 3)
+	
+	stormdata_9611_health_econ_no0<-stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events != "HIGH SEA" & stormdata_9611_health_econ_no0$events != "ROUGH SEA",]
+	
+	
+grep("RIVER",allowed,value=TRUE)
+	
+	grep("RIVER",notok_global,value=TRUE)	
+	
+	grep("FLOOD",allowed,value=TRUE)
+
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "RIVER FLOOD" | stormdata_9611_health_econ_no0$events == "RIVER FLOODING"]<-"FLOOD"
+
+grep("COLD",allowed,value=TRUE)
+	
+	grep("COLD",notok_global,value=TRUE)
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "COLD"]<-"COLD/WIND CHILL"
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "EXTREME COLD"]<-"EXTREME COLD/WIND CHILL"	
+
+
+used<-sort(unique(stormdata_9611_health_econ_no0$events))
+health_econ_events_names(used, allowed)
+
+
+health_econ_events_notok_split<-sort(table(unlist(strsplit(unlist(strsplit(notok_global, " ")), "/"))))
+health_econ_events_notok_split
+
+map_suggestions<-function(x) {
+					
+					p_names<-grep(x,allowed,value=TRUE)
+					
+					np_names<-grep(x,notok_global,value=TRUE)
+					
+					returnList <- list("Word" = x, "Permitted names" = p_names, "Not permitted names" = np_names )
+						
+					return(returnList)
+				      }
+	
+	word_np<-unlist(strsplit(unlist(strsplit(notok_global, " ")), "/"))
+	
+	sug<-lapply(word_np, map_suggestions)
+	str(sug)
+	
+	
+	
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "FOG"]<-"DENSE FOG"
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "FREEZE" | stormdata_9611_health_econ_no0$events == "FROST"]<-"FROST/FREEZE"
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "SMALL HAIL"]<-"HAIL"
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "WILD/FOREST FIRE"]<-"WILDFIRE"
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "WINTER WEATHER/MIX"]<-"WINTER WEATHER"
+	
+	used<-sort(unique(stormdata_9611_health_econ_no0$events))
+	health_econ_events_names(used, allowed)
+	
+		
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "BLACK ICE" | stormdata_9611_health_econ_no0$events == "ICY ROAD"]<-"FROST/FREEZE"
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "FREEZING DRIZZLE" | stormdata_9611_health_econ_no0$events == "GLAZE"]<-"FROST/FREEZE"
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "URBAN/SML STREAM FLD"]<-"FLOOD"
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "DRY MICROBURST"]<-"STRONG WIND"
+	stormdata_9611_health_econ_no0$events[stormdata_9611_health_econ_no0$events == "MIXED PRECIP"]<-"SLEET"
+	
+	
+	stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events == "MARINE ACCIDENT",]
+	
+	factor(stormdata[toupper(stormdata$EVTYPE) == "MARINE ACCIDENT" & stormdata$years == 1996 & stormdata$STATE == "CA",][,2])
+	
+	factor(stormdata[ stormdata$BGN_DATE == "12/2/1996 0:00:00" & stormdata$STATE == "CA",][,8])
+	
+	sort(table(stormdata[stormdata$BGN_DATE == "12/2/1996 0:00:00",][,7]))
+	
+	ma<-stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events == "MARINE ACCIDENT",]
+	ma
+	
+	round((sum(ma$fatalities)/sum(stormdata_9611_health_econ_no0$fatalities))*100, 3)
+	
+	round((sum(ma$injuries)/sum(stormdata_9611_health_econ_no0$injuries))*100, 3)
+	
+	stormdata_9611_health_econ_no0<-stormdata_9611_health_econ_no0[stormdata_9611_health_econ_no0$events != "MARINE ACCIDENT",]
+	
+
+	used<-sort(unique(stormdata_9611_health_econ_no0$events))
+	health_econ_events_names(used, allowed)
+
+
+	stormdata_9611_health_econ_no0_ses<-stormdata_9611_health_econ_no0
+
+	names(stormdata_9611_health_econ_no0_ses)[2]<-"season"
+	
+	stormdata_9611_health_econ_no0_ses$season<-sapply(strsplit(as.character(stormdata_9611_health_econ_no0_ses$season)," ",fixed = TRUE),"[[",1)
+	stormdata_9611_health_econ_no0_ses$season<-mdy(stormdata_9611_health_econ_no0_ses$season)
+	
+	stormdata_9611_health_econ_no0_ses$season<-sapply(stormdata_9611_health_econ_no0_ses$season, month)
+	
+	
+	stormdata_9611_health_econ_no0_ses$season<-sapply(stormdata_9611_health_econ_no0_ses$season, month)
+	stormdata_9611_health_econ_no0_ses$season[stormdata_9611_health_econ_no0_ses$season == 1 | stormdata_9611_health_econ_no0_ses$season == 2 | stormdata_9611_health_econ_no0_ses$season == 12]<-"WINTER"
+	stormdata_9611_health_econ_no0_ses$season[stormdata_9611_health_econ_no0_ses$season == 3 | stormdata_9611_health_econ_no0_ses$season == 4 | stormdata_9611_health_econ_no0_ses$season == 5]<-"SPRING"
+	stormdata_9611_health_econ_no0_ses$season[stormdata_9611_health_econ_no0_ses$season == 6 | stormdata_9611_health_econ_no0_ses$season == 7 | stormdata_9611_health_econ_no0_ses$season == 8]<-"SUMMER"
+	stormdata_9611_health_econ_no0_ses$season[stormdata_9611_health_econ_no0_ses$season == 9 | stormdata_9611_health_econ_no0_ses$season == 10 | stormdata_9611_health_econ_no0_ses$season == 11]<-"AUTUMN"
+
+
+	table(factor(stormdata_9611_health_econ_no0_ses$prop_dmg_exp))
+	table(factor(stormdata_9611_health_econ_no0_ses$crop_dmg_exp))
+	
+
+	
+	pc<-stormdata_9611_health_econ_no0_ses$prop_dmg_exp
+	cc<-stormdata_9611_health_econ_no0_ses$crop_dmg_exp
+	
+	pc<- sapply(pc, as.character)
+	pc[pc == ""]<-1
+	pc[pc == "K"]<-1000
+	pc[pc == "M"]<-1000000
+	pc[pc == "B"]<-1000000000
+	
+	cc<- sapply(cc, as.character)
+	cc[cc == ""]<-1
+	cc[cc == "K"]<-1000
+	cc[cc == "M"]<-1000000
+	cc[cc == "B"]<-1000000000
+
+	stormdata_9611_health_econ_no0_ses<-cbind(stormdata_9611_health_econ_no0_ses, pc, cc)
+
+	stormdata_9611_health_econ_no0_ses$pc<-as.numeric(levels(stormdata_9611_health_econ_no0_ses$pc))[stormdata_9611_health_econ_no0_ses$pc]
+	stormdata_9611_health_econ_no0_ses$cc<-as.numeric(levels(stormdata_9611_health_econ_no0_ses$cc))[stormdata_9611_health_econ_no0_ses$cc]
+	
+	stormdata_9611_health_econ_no0_ses$prop_toll<-stormdata_9611_health_econ_no0_ses$prop_dmg * stormdata_9611_health_econ_no0_ses$pc
+	stormdata_9611_health_econ_no0_ses$crop_toll<-stormdata_9611_health_econ_no0_ses$crop_dmg * stormdata_9611_health_econ_no0_ses$cc
+	
+	
+	
+	states_tab<-read.csv("state_table.csv")
+	
+	
+	state_regions<-data.frame(state = states_tab$abbreviation, region = states_tab$census_region_name, stringsAsFactors = FALSE)
+	
+	
+	stormdata_9611_health_econ_no0_ses<-merge(stormdata_9611_health_econ_no0_ses, state_regions, by="state")
+	stormdata_9611_health_econ_no0_ses$region<-as.character(stormdata_9611_health_econ_no0_ses$region)
+	
+	
+	table(stormdata_9611_health_econ_no0_ses$region)
+	
+	
+	ts<-stormdata_9611_health_econ_no0_ses[stormdata_9611_health_econ_no0_ses$region=="",]
+	unique(ts$state)
+	
+	
+	stormdata_9611_health_econ_no0_ses$region[stormdata_9611_health_econ_no0_ses$region == ""]<-"Commonwealth"
+	
+	
+
+	
+	tidy_stormdata_9611_health_econ_no0_ses<-stormdata_9611_health_econ_no0_ses[c("years", "events", "season", "region", "fatalities", "injuries", "prop_toll", "crop_toll")]
+	
+	
+	table(!is.na(tidy_stormdata_9611_health_econ_no0_ses))
+
+
+
+	
+# ANALYSIS
+# We will aggregate health and economic impact data by season and region and represent it in series of barplots in  order to determine which are 
+the most harmful event in each region by season.
+	
+# This will require some more data formatting
+
+	# Set region and season factors for correct faceting order (regions from east to west and seasons from winter to autumn)
+	tidy_stormdata_9611_health_econ_no0_ses$region<-as.factor(tidy_stormdata_9611_health_econ_no0_ses$region)
+	tidy_stormdata_9611_health_econ_no0_ses$season<-as.factor(tidy_stormdata_9611_health_econ_no0_ses$season)
+	
+	tidy_stormdata_9611_health_econ_no0_ses$region <- factor(tidy_stormdata_9611_health_econ_no0_ses$region,
+									levels = c("Northeast", "South", "Midwest", "West", "Commonwealth")
+								)
+	tidy_stormdata_9611_health_econ_no0_ses$season <- factor(tidy_stormdata_9611_health_econ_no0_ses$season,
+									levels = c("WINTER", "SPRING", "SUMMER", "AUTUMN")
+								)
+	levels(tidy_stormdata_9611_health_econ_no0_ses$season)<- c("ALL WINTERS 1996-2011", "ALL SPRINGS 1996-2011", "ALL SUMMERS 1996-2011", "ALL AUTUMNS 1996-2011")							
+	
+								
+	# Melt data by "evets" and "season_region" 
+	tidy_stormdata_9611_health_econ_no0_ses_melt<-melt(tidy_stormdata_9611_health_econ_no0_ses, id = c("years", "events", "region", "season"), measure.vars=c("fatalities", "injuries", "prop_toll", "crop_toll"))
+	# Cast to calculate means 
+	tidy_stormdata_9611_health_econ_no0_ses_means<-dcast(tidy_stormdata_9611_health_econ_no0_ses_melt, events + region + season ~ variable, mean)
+	# Melt again
+	tidy_stormdata_9611_health_econ_no0_ses_means_melt<-melt(tidy_stormdata_9611_health_econ_no0_ses_means, id = c("events", "region", "season"), measure.vars=c("fatalities", "injuries", "prop_toll", "crop_toll"))
+	# Merge two melted datasets by events, region and season to add mean values for each events - unique region - season pair
+	tidy_stormdata_9611_health_econ_no0_ses_withmeans<-merge(tidy_stormdata_9611_health_econ_no0_ses_melt, tidy_stormdata_9611_health_econ_no0_ses_means_melt, c("events", "region", "season", "variable"))
+#	
+	names(tidy_stormdata_9611_health_econ_no0_ses_withmeans)[4]<-"damage_type"
+	names(tidy_stormdata_9611_health_econ_no0_ses_withmeans)[6:7]<-c("value", "seas_reg_mean")
+	# Add a column that specifies the type of mean value in "seas_reg_mean"
+	tidy_stormdata_9611_health_econ_no0_ses_withmeans$mean<-"fatalities mean"
+	tidy_stormdata_9611_health_econ_no0_ses_withmeans[tidy_stormdata_9611_health_econ_no0_ses_withmeans$damage_type == "injuries",]$mean<-"injuries mean"
+	tidy_stormdata_9611_health_econ_no0_ses_withmeans[tidy_stormdata_9611_health_econ_no0_ses_withmeans$damage_type == "prop_toll",]$mean<-"prop_toll mean"
+	tidy_stormdata_9611_health_econ_no0_ses_withmeans[tidy_stormdata_9611_health_econ_no0_ses_withmeans$damage_type == "crop_toll",]$mean<-"crop_toll mean"
+	
+	# Add a column with number of events of sames type in a region during same season
+	add_count<-tidy_stormdata_9611_health_econ_no0_ses_withmeans
+	names(add_count)[8]<-"number_of_events"
+	add_count_melt<-melt(add_count, id = c("events", "region", "season", "damage_type"), measure.vars=c("number_of_events"))
+	add_count_cast<-dcast(add_count_melt, events + region + season + damage_type ~ variable, length)
+	tidy_stormdata_9611_health_econ_no0_ses_withmeans<-merge(tidy_stormdata_9611_health_econ_no0_ses_withmeans, add_count_cast, c("events", "region", "season", "damage_type"))
+	
+	# Add column with X-axis labels that include event names and numer of times events occured in a region by season 
+	tidy_stormdata_9611_health_econ_no0_ses_withmeans$X_label<-paste(tidy_stormdata_9611_health_econ_no0_ses_withmeans$events, " [", tidy_stormdata_9611_health_econ_no0_ses_withmeans$number_of_events, "]")
+	
+# Now we can adress the first question: 
+# Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+	
+
+	# Subset only health impact related data
+	health_plot_data<-tidy_stormdata_9611_health_econ_no0_ses_withmeans[tidy_stormdata_9611_health_econ_no0_ses_withmeans$damage_type == "fatalities" | tidy_stormdata_9611_health_econ_no0_ses_withmeans$damage_type == "injuries",]
+	
+	# Plotting health impact related data
+
+	health_plot<-ggplot(data=health_plot_data, aes(x=X_label, y=value))
+	health_plot + geom_jitter(alpha=0.5, aes(color=damage_type),position = position_jitter(width = .2)) +
+	geom_point(aes(y=seas_reg_mean, shape=mean)) + 
+	theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+	theme(plot.margin = unit(c(2, 2, 2, 2), "cm")) + 
+	facet_wrap(region ~ season, ncol=4, scales="free") +
+	labs(title="Number of injuries and fatalities caused by StormData events in US regions presented per event seasonally for years 1996-2011", x="EVENTS [TOTAL NUMBER OF OCCURENCES]", y="NUMBER OF INJURIES AND FATALITIES") +
+	theme(plot.title = element_text(size=35, face="bold", vjust=2)) +
+	theme(axis.title=element_text(size=20,face="bold")) +
+	theme(legend.title = element_text(size=20, face="bold"))
+
+
+
+# Second question: 
+# Across the United States, which types of events have the greatest economic consequences?
+	
+
+	# Subset only health impact related data
+	econ_plot_data<-tidy_stormdata_9611_health_econ_no0_ses_withmeans[tidy_stormdata_9611_health_econ_no0_ses_withmeans$damage_type == "prop_toll" | tidy_stormdata_9611_health_econ_no0_ses_withmeans$damage_type == "crop_toll",]
+	
+	# Economic damage value might be quite large which will result in less readable plots.
+	# Let's examine the "value" and "seas_reg_mean" column of the econ_plot_data subset.
+	summary(econ_plot_data$value)
+	summary(econ_plot_data$seas_reg_mean)
+	
+	# Difference between min and max values is indeed large. 
+	# It makes sence to convert them to their log10 values.
+	econ_plot_data_log10<-mutate(econ_plot_data, value=log10(value))
+	econ_plot_data_log10<-mutate(econ_plot_data_log10, seas_reg_mean=log10(seas_reg_mean))
+	
+	# Replace introduced -Inf values (performing log10(0)) with 0
+	econ_plot_data_log10$value[econ_plot_data_log10$value == -Inf]<-0
+	econ_plot_data_log10$seas_reg_mean[econ_plot_data_log10$seas_reg_mean == -Inf]<-0
+	
+	# Plotting health impact related data
+
+	econ_plot<-ggplot(data=econ_plot_data_log10, aes(x=X_label, y=value))
+	econ_plot + geom_jitter(alpha=0.5, aes(color=damage_type),position = position_jitter(width = .2)) +
+	geom_point(aes(y=seas_reg_mean, shape=mean)) + 
+	theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+	theme(plot.margin = unit(c(2, 2, 2, 2), "cm")) + 
+	facet_wrap(region ~ season, ncol=4, scales="free") +
+	labs(title="Total sum of preperty and crop damage caused by StormData events in US regions presented per event type seasonally for years 1996-2011", x="EVENTS [TOTAL NUMBER OF OCCURENCES]", y="LOG[10] OF DAMAGE TOTAL IN $") +
+	theme(plot.title = element_text(size=35, face="bold", vjust=2)) +
+	theme(axis.title=element_text(size=20,face="bold")) +
+	theme(legend.title = element_text(size=20, face="bold"))
+
+
+	
+# RESULTS
+
+# Health impact plot interpretation
+
+	# Health impact data is presented on 20 plots.
+	# We will create two functions to provide some summarization of most important take-aways from each plot
+	
+	fatalities_report<-function(a,b){
+					o<-tidy_stormdata_9611_health_econ_no0_ses_withmeans[tidy_stormdata_9611_health_econ_no0_ses_withmeans$region == a & 
+											     tidy_stormdata_9611_health_econ_no0_ses_withmeans$season == b & 
+											     tidy_stormdata_9611_health_econ_no0_ses_withmeans$damage_type == "fatalities",
+											     ]
+					a<-toupper(a)
+					p<-max(o$seas_reg_mean)
+					r<-max(o$number_of_events)
+					s<-unique(o[o$seas_reg_mean==p,]$events)
+					t<-unique(o[o$number_of_events==r,]$events)
+					u<-unique(o[o$number_of_events==r,]$seas_reg_mean)
+					
+					returnList <- list("BEGINNING OF EVENT FATALITY REPORT",
+							   "Region"=a, 
+							   "Season"=b, 
+							   "Event with highest fatalities mean value"=s, 
+							   "Mean number of fatalities"=p,
+							   "Most occuring event"=t,
+							   "Number of occurences"=r,
+							   "Most occuring event's fatalities mean value"=u,
+							   "END OF REPORT"
+							   )
+					
+					return(returnList)
+					
+					}
+	
+	injuries_report<-function(a,b){
+					o<-tidy_stormdata_9611_health_econ_no0_ses_withmeans[tidy_stormdata_9611_health_econ_no0_ses_withmeans$region == a & 
+											     tidy_stormdata_9611_health_econ_no0_ses_withmeans$season == b & 
+											     tidy_stormdata_9611_health_econ_no0_ses_withmeans$damage_type == "injuries",
+											     ]
+					a<-toupper(a)
+					p<-max(o$seas_reg_mean)
+					r<-max(o$number_of_events)
+					s<-unique(o[o$seas_reg_mean==p,]$events)
+					t<-unique(o[o$number_of_events==r,]$events)
+					u<-unique(o[o$number_of_events==r,]$seas_reg_mean)
+					
+					returnList <- list("BEGINNING OF EVENT INJURY REPORT",
+							   "Region"=a, 
+							   "Season"=b, 
+							   "Event with highest injuries mean value"=s, 
+							   "Mean number of injuries"=p,
+							   "Most occuring event"=t,
+							   "Number of occurences"=r,
+							   "Most occuring event's injuries mean value"=u,
+							   "END OF REPORT"
+							   )
+					
+					return(returnList)
+					
+					}
+
+
+# Health data plot reports
+
+	# Reports for the NORTHEAST region
+		# Northeast, ALL WINTERS 1996-2011 plot report
+			a="Northeast"
+			b="ALL WINTERS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)
+		
+		# Northeast, ALL SPRINGS 1996-2011 plot report
+			a="Northeast"
+			b="ALL SPRINGS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)
+		
+		# Northeast, ALL SUMMERS 1996-2011 plot report
+			a="Northeast"
+			b="ALL SUMMERS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)
+		
+		# Northeast, ALL AUTUMNS 1996-2011 plot report
+			a="Northeast"
+			b="ALL AUTUMNS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)
+			
+			
+	# Reports for the SOUTH region
+		# South, ALL WINTERS 1996-2011 plot report
+			a="South"
+			b="ALL WINTERS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)
+		
+		# South, ALL SPRINGS 1996-2011 plot report
+			a="South"
+			b="ALL SPRINGS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)
+		
+		# South, ALL SUMMERS 1996-2011 plot report
+			a="South"
+			b="ALL SUMMERS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)
+		
+		# South, ALL AUTUMNS 1996-2011 plot report
+			a="South"
+			b="ALL AUTUMNS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)
+			
+			
+	# Reports for the MIDWEST region
+		# Midwest, ALL WINTERS 1996-2011 plot report
+			a="Midwest"
+			b="ALL WINTERS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)
+		
+		# Midwest, ALL SPRINGS 1996-2011 plot report
+			a="Midwest"
+			b="ALL SPRINGS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)
+		
+		# Midwest, ALL SUMMERS 1996-2011 plot report
+			a="Midwest"
+			b="ALL SUMMERS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)
+		
+		# Midwest, ALL AUTUMNS 1996-2011 plot report
+			a="Midwest"
+			b="ALL AUTUMNS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)	
+	
+			
+	# Reports for the WEST region
+		# West, ALL WINTERS 1996-2011 plot report
+			a="West"
+			b="ALL WINTERS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)
+		
+		# West, ALL SPRINGS 1996-2011 plot report
+			a="West"
+			b="ALL SPRINGS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)
+		
+		# West, ALL SUMMERS 1996-2011 plot report
+			a="West"
+			b="ALL SUMMERS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)
+		
+		# West, ALL AUTUMNS 1996-2011 plot report
+			a="West"
+			b="ALL AUTUMNS 1996-2011"
+			fatalities_report(a,b)
+			injuries_report(a,b)	
+			
+			
+# Economic damage plot interpretation
+
+	# Economic damage data is presented on 20 plots.
+	# We will create two functions to provide some summarization of most important take-aways from each plot
+	
+	prop_damage_report<-function(a,b){
+					o<-tidy_stormdata_9611_health_econ_no0_ses_withmeans[tidy_stormdata_9611_health_econ_no0_ses_withmeans$region == a & 
+											     tidy_stormdata_9611_health_econ_no0_ses_withmeans$season == b & 
+											     tidy_stormdata_9611_health_econ_no0_ses_withmeans$damage_type == "prop_toll",
+											     ]
+					a<-toupper(a)
+					p<-max(o$seas_reg_mean)
+					r<-max(o$number_of_events)
+					s<-unique(o[o$seas_reg_mean==p,]$events)
+					t<-unique(o[o$number_of_events==r,]$events)
+					u<-unique(o[o$number_of_events==r,]$seas_reg_mean)
+					
+					returnList <- list("BEGINNING OF EVENT PROPERTY DAMAGE REPORT",
+							   "Region"=a, 
+							   "Season"=b, 
+							   "Event with highest property damage sum mean value"= s, 
+							   "Mean propery damage sum, $"= p,
+							   "Most occuring event"= t,
+							   "Number of occurences"= r,
+							   "Most occuring event's propery damage sum mean value, $"= u,
+							   "END OF REPORT"
+							   )
+					
+					return(returnList)
+					
+					}
+	
+	crop_damage_report<-function(a,b){
+					o<-tidy_stormdata_9611_health_econ_no0_ses_withmeans[tidy_stormdata_9611_health_econ_no0_ses_withmeans$region == a & 
+											     tidy_stormdata_9611_health_econ_no0_ses_withmeans$season == b & 
+											     tidy_stormdata_9611_health_econ_no0_ses_withmeans$damage_type == "crop_toll",
+											     ]
+					a<-toupper(a)
+					p<-max(o$seas_reg_mean)
+					r<-max(o$number_of_events)
+					s<-unique(o[o$seas_reg_mean==p,]$events)
+					t<-unique(o[o$number_of_events==r,]$events)
+					u<-unique(o[o$number_of_events==r,]$seas_reg_mean)
+					
+					returnList <- list("BEGINNING OF EVENT CROP DAMAGE REPORT",
+							   "Region"=a, 
+							   "Season"=b, 
+							   "Event with highest crops damage sum mean value"= s, 
+							   "Mean crops damage sum, $"= p,
+							   "Most occuring event"= t,
+							   "Number of occurences"= r,
+							   "Most occuring event's crop damage sum mean value, $"= u,
+							   "END OF REPORT"
+							   )
+					
+					return(returnList)
+					
+					}			
+			
+			
+# Economic data damage plot reports
+
+	# Reports for the NORTHEAST region
+		# Northeast, ALL WINTERS 1996-2011 plot report
+			a="Northeast"
+			b="ALL WINTERS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)
+		
+		# Northeast, ALL SPRINGS 1996-2011 plot report
+			a="Northeast"
+			b="ALL SPRINGS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)
+		
+		# Northeast, ALL SUMMERS 1996-2011 plot report
+			a="Northeast"
+			b="ALL SUMMERS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)
+		
+		# Northeast, ALL AUTUMNS 1996-2011 plot report
+			a="Northeast"
+			b="ALL AUTUMNS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)
+			
+			
+	# Reports for the SOUTH region
+		# South, ALL WINTERS 1996-2011 plot report
+			a="South"
+			b="ALL WINTERS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)
+		
+		# South, ALL SPRINGS 1996-2011 plot report
+			a="South"
+			b="ALL SPRINGS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)
+		
+		# South, ALL SUMMERS 1996-2011 plot report
+			a="South"
+			b="ALL SUMMERS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)
+		
+		# South, ALL AUTUMNS 1996-2011 plot report
+			a="South"
+			b="ALL AUTUMNS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)
+			
+			
+	# Reports for the MIDWEST region
+		# Midwest, ALL WINTERS 1996-2011 plot report
+			a="Midwest"
+			b="ALL WINTERS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)
+		
+		# Midwest, ALL SPRINGS 1996-2011 plot report
+			a="Midwest"
+			b="ALL SPRINGS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)
+		
+		# Midwest, ALL SUMMERS 1996-2011 plot report
+			a="Midwest"
+			b="ALL SUMMERS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)
+		
+		# Midwest, ALL AUTUMNS 1996-2011 plot report
+			a="Midwest"
+			b="ALL AUTUMNS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)	
+	
+			
+	# Reports for the WEST region
+		# West, ALL WINTERS 1996-2011 plot report
+			a="West"
+			b="ALL WINTERS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)
+		
+		# West, ALL SPRINGS 1996-2011 plot report
+			a="West"
+			b="ALL SPRINGS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)
+		
+		# West, ALL SUMMERS 1996-2011 plot report
+			a="West"
+			b="ALL SUMMERS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)
+		
+		# West, ALL AUTUMNS 1996-2011 plot report
+			a="West"
+			b="ALL AUTUMNS 1996-2011"
+			prop_damage_report(a,b)
+			crop_damage_report(a,b)	
+
