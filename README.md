@@ -5,7 +5,7 @@ This analysis was performed as a final project for the Reproducible Research cou
 
 The aim of this analysis was to analyse, clean and present the NOAA dataset in a way that would reveal which weather events are the most devastating in terms of public health and economic damage.
 
-The orogonal dataset can be found here: https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2
+The original dataset can be found here: https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2
 
 Prior to analysis of population health and economic consequences of events from NOAA database, several exploratory and data processing steps were performed. A barplot was created first to represent unique event types by year of occurence. This barplot yielded understanding that only events from 1996 till 2011 can provide unbiased starting point for further data analysis. In the next step all event names were converged to 48 NOAA permitted names. Further, data was processed to a form that allowed it’s graphical representation per assignment requirement - using not more then 2 plots. In the last step results were presented and summarised as short answers for assigment questions.
 
